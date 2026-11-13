@@ -1,0 +1,27 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:                       # bound to localhost only: Qdrant has no auth configured
+      - "127.0.0.1:6333:6333"    # REST API + Web UI (http://localhost:6333/dashboard)
+      - "127.0.0.1:6334:6334"    # gRPC
+    volumes:
+      - qdrant_storage:/qdrant/storage
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    container_name: phoenix
+    restart: unless-stopped
+    ports:                       # bound to localhost only: auth is disabled for local single-user use
+      - "127.0.0.1:6006:6006"    # UI + OTLP/HTTP collector (http://localhost:6006)
+      - "127.0.0.1:4317:4317"    # OTLP/gRPC collector
+    environment:
+      - PHOENIX_WORKING_DIR=/mnt/data
+      - PHOENIX_ENABLE_AUTH=false   # set true + PHOENIX_SECRET and put PHOENIX_API_KEY in .env if you share this server
+    volumes:
+      - phoenix_data:/mnt/data   # traces persist across restarts
+
+volumes:
+  qdrant_storage:
+  phoenix_data:
