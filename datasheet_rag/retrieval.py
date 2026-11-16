@@ -127,15 +127,48 @@ def list_documents() -> list[dict]:
 
 
 @_traced_tool
+def get_pin(pin_name: str, part_number: str | None = None) -> list[dict]:
+    """Pin-function chunks for an exact pin name (case-insensitive), e.g. 'PGOOD', 'MODE/SYNC'."""
+    must = [_match("content_type", "pin")]
+    if part_number:
+        must.append(_match("part_numbers", part_number))
+    pts, _ = qdrant.scroll(config.COLLECTION, limit=500, with_payload=True, scroll_filter=models.Filter(must=must))
+    want = pin_name.strip().casefold()
+    return [_hit(p) for p in pts if str(p.payload.get("pin_name", "")).casefold() == want]
+
+
+def get_chunk_payload(doc_id: str, chunk_index: int) -> dict | None:
+    """Full stored payload of one non-page chunk (e.g. table_header_md / table_rows_md for spec lookups)."""
+    pts, _ = qdrant.scroll(config.COLLECTION, limit=1, with_payload=True, scroll_filter=models.Filter(
+        must=[_match("doc_id", doc_id), _match("chunk_index", chunk_index)],
+        must_not=[_match("content_type", "page")]))
+    return pts[0].payload if pts else None
+
+
+def _resolve_pdf(source_path: str | None, source: str) -> Path:
+    """Locate the PDF: the path stored at ingestion, else a file with the same name in DATASHEET_PDF_DIRS
+    (os.pathsep-separated). The fallback matters in containers, where the host path does not exist."""
+    import os
+
+    if source_path and Path(source_path).exists():
+        return Path(source_path)
+    for d in filter(None, os.getenv("DATASHEET_PDF_DIRS", "").split(os.pathsep)):
+        candidate = Path(d) / source
+        if candidate.exists():
+            return candidate
+    raise FileNotFoundError(f"PDF {source!r} not found (stored path {source_path!r}; set DATASHEET_PDF_DIRS)")
+
+
+@_traced_tool
 def render_page_image(doc_id: str, page: int, dpi: int = 150) -> bytes:
     """Render the original PDF page to PNG (path stored at ingestion time as `source_path`)."""
     import pymupdf
 
-    pts, _ = qdrant.scroll(config.COLLECTION, limit=1, with_payload=["source_path", "num_pages"],
+    pts, _ = qdrant.scroll(config.COLLECTION, limit=1, with_payload=["source_path", "source", "num_pages"],
                            scroll_filter=models.Filter(must=[_match("doc_id", doc_id), _match("content_type", "page")]))
-    if not pts or not pts[0].payload.get("source_path"):
-        raise ValueError(f"unknown doc_id {doc_id!r} or no source_path stored (re-run ingestion)")
-    path = Path(pts[0].payload["source_path"])
+    if not pts:
+        raise ValueError(f"unknown doc_id {doc_id!r}")
+    path = _resolve_pdf(pts[0].payload.get("source_path"), pts[0].payload["source"])
     if not 1 <= page <= pts[0].payload["num_pages"]:
         raise ValueError(f"page must be 1..{pts[0].payload['num_pages']}")
     with pymupdf.open(path) as doc:
