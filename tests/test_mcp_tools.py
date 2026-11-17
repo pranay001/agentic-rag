@@ -11,6 +11,7 @@ os.environ["MCP_TRACING"] = "false"
 from fastmcp import Client  # noqa: E402
 
 from datasheet_mcp.server import mcp  # noqa: E402
+from datasheet_rag import retrieval  # noqa: E402
 
 pytestmark = pytest.mark.anyio
 
@@ -90,3 +91,25 @@ async def test_input_validation_errors_are_clean():
     assert bad.is_error and "64-character" in bad.content[0].text
     assert missing.is_error and "not found" in missing.content[0].text
     assert oob.is_error                                     # dpi above the 150 cap is rejected by the schema
+
+
+async def test_each_pdf_is_a_resource_named_by_file_name():
+    """Typing @ in a client lists these: one resource per ingested PDF, named after the file, and nothing else."""
+    async with Client(mcp) as c:
+        caps = c.server_capabilities
+        tools = {t.name for t in await c.list_tools()}
+        resources = await c.list_resources()
+        detail = json.loads((await c.read_resource(str(resources[0].uri)))[0].text)
+        with pytest.raises(Exception):
+            await c.read_resource("datasheets://pdfs/no-such-file.pdf")
+        with pytest.raises(Exception):
+            await c.read_resource("datasheets://pdfs")                              # no list resource
+    docs = retrieval.list_documents()
+    assert caps.resources is not None                                              # MCP resources capability
+    assert tools == EXPECTED_TOOLS                                                 # not exposed as tools
+    assert all(str(r.uri).startswith("datasheets://pdfs/") for r in resources)
+    assert [r.name for r in resources] == sorted((d["source"] for d in docs), key=str.casefold)
+    assert all(r.mime_type == "application/json" for r in resources)
+    assert any("ad4695_4696%20%281%29.pdf" in str(r.uri) for r in resources)       # spaces/parens are URI-encoded
+    assert detail["file_name"] == resources[0].name and len(detail["doc_id"]) == 64
+    assert detail["num_pages"] > 0 and isinstance(detail["part_numbers"], list)

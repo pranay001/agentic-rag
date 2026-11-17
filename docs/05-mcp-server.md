@@ -32,6 +32,16 @@ All tools are annotated **read-only, non-destructive, idempotent, closed-world**
 
 The server's `instructions` describe the intended flow (list → search → expand → image) to the client model.
 
+### 1.1 Resources
+
+Besides tools, the server exposes the **MCP resources capability**: it advertises `resources` in its capabilities, and clients discover and fetch these with `resources/list` and `resources/read`, not `tools/call`. All resources require the same `Datasheet.Reader` role as the tools: callers without it don't see them and can't read them. Each read is audited the same way as a tool call.
+
+| URI | Name shown in the client | Returns (JSON) |
+|---|---|---|
+| `datasheets://pdfs/<file name>` (one per PDF) | the PDF's file name, e.g. `ltc3310s-3310s-1-3310-3310-1.pdf` | That PDF's `file_name`, `doc_id`, title, manufacturer, part numbers, category, summary, page count |
+
+Typing `@` in a client that lists MCP resources (e.g. Claude Code) shows one entry per PDF file name. The per-PDF list is built from Qdrant on every `resources/list` (`PdfResourceProvider`), so newly ingested PDFs appear without restarting the server. File names are URI-encoded (`ad4695_4696 (1).pdf` → `ad4695_4696%20%281%29.pdf`). If two ingested PDFs share a file name, each URI gets its `doc_id` prefix (`datasheets://pdfs/<12 hex>/<file name>`).
+
 **Not exposed:** ingestion, deletion, the agent (`answer_question`), or anything that writes. The client's own model does the reasoning.
 
 ## 2. Files
@@ -159,7 +169,7 @@ Ask Claude, for example:
 
 ```powershell
 docker compose up -d qdrant          # tools tests use the live collection (+ OPENAI_API_KEY for query embeddings)
-uv run pytest                        # 9 tests
+uv run pytest                        # 10 tests
 ```
 
 | Test | Verifies |
@@ -171,8 +181,9 @@ uv run pytest                        # 9 tests
 | `test_get_pin_and_table_and_page` | Pin lookup (PGOOD, p.10), full table, page Markdown |
 | `test_page_image_is_png` | Image content from the original PDF |
 | `test_input_validation_errors_are_clean` | Bad `doc_id`, missing page, out-of-range dpi give clean errors |
+| `test_each_pdf_is_a_resource_named_by_file_name` | `resources` capability advertised; exactly one resource per ingested PDF, named by file name (sorted, URI-encoded), not exposed as tools; reading one returns its details; unknown file errors |
 | `test_entra_metadata_and_401` | Unauthenticated → 401 + `WWW-Authenticate` resource metadata; protected-resource and authorization-server metadata; DCR endpoint; PKCE S256 |
-| `test_role_is_required_on_every_tool` | Token **with** `Datasheet.Reader` can list and call tools. Token **without** it sees no tools and is denied. |
+| `test_role_is_required_on_every_tool` | Token **with** `Datasheet.Reader` can list and call tools and sees/reads the PDF resources. Token **without** it sees no tools or resources and is denied. |
 
 Also verified manually: the container in dev mode answering all tools over HTTP (including the page image from the mounted PDF), traces arriving in Phoenix, the container in Entra mode returning the 401 challenge, and the stdio mode.
 

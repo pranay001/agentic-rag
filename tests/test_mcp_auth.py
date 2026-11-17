@@ -81,11 +81,19 @@ async def test_role_is_required_on_every_tool(entra_server):
         async with Client(t) as c:
             names = {x.name for x in await c.list_tools()}
             res = await c.call_tool("list_datasheets", {}, raise_on_error=False)
-            return names, res
+            resources = {str(r.uri) for r in await c.list_resources()}
+            try:
+                await c.read_resource("datasheets://pdfs/ltc3310s-3310s-1-3310-3310-1.pdf")
+                resource_ok = True
+            except Exception:
+                resource_ok = False
+            return names, res, resources, resource_ok
 
     async with app.router.lifespan_context(app):
-        names_ok, ok = await call("with-role")
-        names_denied, denied = await call("no-role")
+        names_ok, ok, res_ok, read_ok = await call("with-role")
+        names_denied, denied, res_denied, read_denied = await call("no-role")
     assert "list_datasheets" in names_ok and not ok.is_error
     assert "list_datasheets" not in names_denied            # tools are hidden from callers without the role
     assert denied.is_error
+    assert any(u.startswith("datasheets://pdfs/") for u in res_ok) and read_ok  # resources need the same role
+    assert not res_denied and not read_denied                                  # nothing listed without the role
