@@ -10,6 +10,8 @@ A local system that ingests semiconductor datasheets (PDF) into a vector databas
 | [02 Agentic RAG](02-agentic-rag.md) | `agentic_rag.ipynb` | `answer_question()`: Microsoft Agent Framework agent, tools, verifier, tracing |
 | [03 TruLens evals](03-trulens-evals.md) | `trulens_evals.ipynb` | Golden set, metrics, running and reading the evaluation, dashboard |
 | [04 TruLens course](04-trulens-learning.md) | `trulens_learning.ipynb` | Beginner-to-expert learning material for TruLens |
+| [05 MCP server](05-mcp-server.md) | `datasheet_mcp/` | Read-only retrieval tools over MCP for Claude Desktop, Docker, security model, tests |
+| [06 Entra ID setup](06-entra-setup.md) | (admin guide) | App registration, scope, app role, secret, assignment for Microsoft SSO |
 
 ## Architecture
 
@@ -49,6 +51,9 @@ Other files:
 | `parsed/` | Cache of page Markdown produced by the vision parser (git-ignored) |
 | `evals/` | TruLens SQLite databases and result CSVs (git-ignored) |
 | `trulens_dashboard.py` | Launches the TruLens dashboard on http://localhost:8501 |
+| `datasheet_mcp/`, `Dockerfile.mcp` | MCP server (read-only retrieval tools, Entra SSO), container on http://localhost:8000/mcp |
+| `tests/` | MCP server tests (`uv run pytest`) |
+| `pdfs/` | Original PDFs (mounted read-only into the MCP container for page images) |
 
 ## Quick start
 
@@ -71,6 +76,7 @@ copy .env.example .env                    # then set OPENAI_API_KEY
 | Qdrant dashboard | http://localhost:6333/dashboard |
 | Phoenix (traces) | http://localhost:6006, projects `datasheet-rag` (ingestion) and `datasheet-agent` (agent) |
 | TruLens dashboard | `uv run python trulens_dashboard.py` → http://localhost:8501 |
+| MCP server | `docker compose up -d datasheet-mcp` → http://localhost:8000/mcp (Claude Desktop setup: [05](05-mcp-server.md#5-connecting-claude-desktop)) |
 
 ## Models
 

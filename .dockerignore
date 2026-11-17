@@ -1,0 +1,12 @@
+.venv
+.env
+.git
+.vscode
+.agents
+parsed
+evals
+pdfs
+docs
+tests
+*.ipynb
+**/__pycache__

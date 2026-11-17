@@ -22,6 +22,27 @@ services:
     volumes:
       - phoenix_data:/mnt/data   # traces persist across restarts
 
+  datasheet-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    image: datasheet-mcp:latest
+    container_name: datasheet-mcp
+    restart: unless-stopped
+    depends_on: [qdrant, phoenix]
+    env_file: .env               # OPENAI_API_KEY, ENTRA_*, MCP_* (see docs/05-mcp-server.md)
+    environment:                 # container-network endpoints override the localhost values in .env
+      QDRANT_URL: http://qdrant:6333
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
+      MCP_AUTH_MODE: ${MCP_AUTH_MODE:-entra}
+      MCP_ALLOW_UNAUTHENTICATED_BIND: "1"   # only used when MCP_AUTH_MODE=none; the port below is localhost-only
+    ports:
+      - "127.0.0.1:8000:8000"    # MCP endpoint http://localhost:8000/mcp (localhost only)
+    volumes:
+      - ./pdfs:/data/pdfs:ro     # original PDFs, for get_page_image
+      - mcp_oauth:/data/fastmcp  # OAuth proxy state (encrypted client registrations)
+
 volumes:
   qdrant_storage:
   phoenix_data:
+  mcp_oauth:
